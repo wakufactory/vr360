@@ -18,7 +18,7 @@ v360.html?画像のパス&mode
 
  - mode=0 : 360度Equirectangularフォーマット (THETA等で撮った写真)
  - mode=1 : 360度Equirectangularを上下に並べたステレオ写真
- - mode=2 : 360度Equirectangularの中央部分を切り取って横に並べたステレオ写真
+ - mode=2 : 360度Equirectangularの中央部分を切り取って180度にして横に並べたステレオ写真
 
 具体例はサンプル [index.html](https://wakufactory.github.io/vr360/) を見てください。
 
