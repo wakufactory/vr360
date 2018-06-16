@@ -17,7 +17,7 @@
 //   loadTex(tex)
 
 function WWG() {
-	this.version = "0.9.6" ;
+	this.version = "0.9.7" ;
 	this.can = null ;
 	this.gl = null ;
 	this.vsize = {"float":1,"vec2":2,"vec3":3,"vec4":4,"mat2":4,"mat3":9,"mat4":16} ;
@@ -357,7 +357,10 @@ WWG.prototype.Render.prototype.genTex = function(img,option) {
 	}
 	if(option.repeat==2) {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);		
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+	} else if(option.repeat==1) {
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER);				
 	} else {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
@@ -2724,7 +2727,7 @@ const PoxPlayer  = function(can,opt) {
 		alert("This browser is not supported!!") ;
 		return null ;		
 	}
-	this.can = document.querySelector(can)  ;
+	this.can = (can instanceof HTMLElement)?can:document.querySelector(can)  ;
 
 	// wwg initialize
 	const wwg = new WWG() ;
@@ -2835,13 +2838,30 @@ PoxPlayer.prototype.load = async function(d) {
 	})
 }
 
+PoxPlayer.prototype.loadImage = function(path) {
+	if(path.match(/^https?:/)) {
+		return this.wwg.loadImageAjax(path)
+	}else {
+		return new Promise((resolve,reject) => {
+			const img = new Image() ;
+			img.onload = ()=> {
+				resolve( img ) ;
+			}
+			img.onerror = ()=> {
+				reject("cannot load image") ;
+			}
+			img.src = path ;
+		})
+	}
+}
+
 PoxPlayer.prototype.set = async function(d,param={}) { 
-	
 //	return new Promise((resolve,reject) => {
 	const VS = d.vs ;
 	const FS = d.fs ;
 	this.pox  = {src:d,can:this.can,wwg:this.wwg,synth:this.synth,param:param} ;
 	const POX = this.pox ;
+	POX.loadImage = this.loadImage 
 
 	function V3add() {
 		let x=0,y=0,z=0 ;
@@ -3464,8 +3484,8 @@ PoxPlayer.prototype.Camera.prototype.setPad = function(gp) {
 //	console.log(gp.faxes[0],gp.faxes[1])
 //	console.log(gp.buttons[0],gp.buttons[1])
 
-	this.cam.camRY += gp.faxes[0]/2
-	this.cam.camRX += gp.faxes[1]/2
+//	this.cam.camRY += gp.axes[0]/2
+//	this.cam.camRX += gp.axes[1]/2
 //	this.cam.camd = gp.faxes[1]*this.poxp.pox.setting.scale *0.1
 	if(this.cam.camMode=="walk") {
 		let sc = 0.01*this.poxp.pox.setting.scale ;
