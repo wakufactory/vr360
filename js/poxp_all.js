@@ -355,12 +355,13 @@ WWG.prototype.Render.prototype.genTex = function(img,option) {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		break;
 	}
+	console.log(option.repeat)
 	if(option.repeat==2) {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 	} else if(option.repeat==1) {
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER);				
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);				
 	} else {
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
@@ -680,6 +681,12 @@ WWG.prototype.Render.prototype.updateModelInstance = function(name,buf,count) {
 WWG.prototype.Render.prototype.getModelData =function(name) {
 	var idx = this.getModelIdx(name) ;
 	return this.data.model[idx] ;
+}
+
+WWG.prototype.Render.prototype.updateTex = function(idx,tex) {
+	this.gl.bindTexture(this.gl.TEXTURE_2D, this.texobj[idx]);
+	this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, tex);		
+	if(this.data.texture[idx].opt && !this.data.texture[idx].opt.nomipmap) this.gl.generateMipmap(this.gl.TEXTURE_2D);
 }
 //update uniform values
 WWG.prototype.Render.prototype.pushUniValues = function(u) {
@@ -2798,6 +2805,7 @@ PoxPlayer.prototype.enterVR = function() {
 			console.log("present ok")
 			var leftEye = this.vrDisplay.getEyeParameters("left");
 			var rightEye = this.vrDisplay.getEyeParameters("right");
+			console.log(leftEye)
 			this.can.width = Math.max(leftEye.renderWidth, rightEye.renderWidth) * 2;
 			this.can.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
 			if(this.vrDisplay.displayName=="Oculus Go") {
@@ -2811,6 +2819,7 @@ PoxPlayer.prototype.enterVR = function() {
 	}
 }
 PoxPlayer.prototype.resize = function() {
+	if(this.vrDisplay && this.vrDisplay.isPresenting) return 
 	this.can.width= this.can.offsetWidth*this.pixRatio  ;
 	this.can.height = this.can.offsetHeight*this.pixRatio  ;
 	console.log("canvas:"+this.can.width+" x "+this.can.height);		
@@ -3558,9 +3567,9 @@ PoxPlayer.prototype.Camera.prototype.getMtx = function(scale,sf) {
 
 		this.poxp.vrDisplay.getFrameData(frameData)
 		camM = new CanvasMatrix4()
-		camM.translate(-cam.camCX,-cam.camCY,-cam.camCZ)
 		camM.rotate(cam.camRY,0,1,0)
 		camM.rotate(cam.camRX,1,0,0)
+		camM.translate(-cam.camCX,-cam.camCY,-cam.camCZ)
 		camM.multRight( new CanvasMatrix4((dx<0)?frameData.leftViewMatrix:frameData.rightViewMatrix))
 		camM.multRight(new CanvasMatrix4( (dx<0)?frameData.leftProjectionMatrix:frameData.rightProjectionMatrix) )
 	} else {
