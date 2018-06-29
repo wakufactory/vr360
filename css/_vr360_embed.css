@@ -1,0 +1,85 @@
+div.v360 {
+	position:relative;
+	width:400px ;
+	height:200px ;
+	text-align: center ;
+}
+div.v360 canvas {
+	width:100% ;
+	height:100% ;
+}
+div.v360 .cc {
+	position:absolute ;
+	text-align: left ;
+	width:10rem ;
+	top:0;
+	left:0;
+	color:#eee ;
+	background-color:#222 ;
+	opacity:0.4 ;	
+}
+div.v360 .pui input[type=range] {
+	width:10rem ;
+}
+div.v360 .pui div.t {
+	float:left;
+	width:3rem ;
+	padding-left:0.2rem ;
+	overflow:hidden ;
+}
+div.v360 .loading {
+	position:absolute ;
+	top:0;
+	left:0;
+	width:100% ;
+	height:100% ;	
+}
+div.v360 .loading img {
+	margin-top:calc(25% - 33px) ;
+	margin-left:calc(50%  - 33px);
+}
+div.v360 .footer {
+	position:absolute ;
+	top:calc(100% - 2rem) ;
+	color:#888 ;
+}
+div.v360 .footer a {
+	color:#888 ;	
+}
+div.v360 .vrbtn {
+	position:absolute ;
+	width:50px ;
+	height:50px ;
+	top:calc( 100% - 50px ) ;
+	left:calc( 100% - 50px ) ;
+	opacity: 0.8 ;
+	background-color:#ccc;
+	background-position: center;
+	background-image:url("../img/goggle.png") ;
+	background-repeat:no-repeat;
+}
+div.v360 div.sbtn {
+	font-size:4rem ;
+	position:absolute ;
+	background-color:white ;
+	opacity:0.8 ;
+	left:calc(50% - 2rem);
+	top:calc(50% - 3rem);
+	cursor:pointer ;
+}
+div.v360 img {
+	max-height:100% ;
+}
+/* swicth (single checkbox) */
+.oswitch input {
+	display:none ;
+}
+.oswitch .sbtn {
+	font-family:"apple color emoji",sans-serif;
+}
+.oswitch input[type=checkbox] + .sbtn:before {
+	content: "⏸" 
+}
+.oswitch input[type=checkbox]:checked + .sbtn:before {
+	content: "▶️" ;
+}
