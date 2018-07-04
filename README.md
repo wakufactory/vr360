@@ -9,6 +9,7 @@ PCではマウスによって向きを変えて見られます。マウスのホ
 OculusGo等のWebVR対応環境では、右下のVRボタンによって全天球VRモードで見ることができます。OculusGoのコントローラのタッチパッドで向きを変えることもできます。
 
 imgとjsの下のファイルとv360.htmlのファイルのみで動作します。他のライブラリ等の依存はありません。
+
 現状、画像サイズは最大8000x4000までになります。
 
 ビュアーの使い方は
@@ -23,6 +24,7 @@ v360.html?画像のパス&mode
  - mode=3 : 横長パノラマ写真。iPhoneに合わせ縦方向の画角を63度に設定
 
 具体例はサンプル [index.html](https://wakufactory.github.io/vr360/) を見てください。
+
 ページ内にビュアーを埋め込めるembed形式はこちらのサンプルを [v360_embed.html](https://wakufactory.github.io/vr360/v360_embed.html)
 
 
