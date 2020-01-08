@@ -20,7 +20,7 @@ v360.html?画像のパス&mode
 
  - mode=0 : 360度Equirectangularフォーマット (THETA等で撮った写真)
  - mode=1 : 360度Equirectangularを上下に並べたステレオ写真
- - mode=2 : 360度Equirectangularの中央部分を切り取って180度にして横に並べたステレオ写真
+ - mode=2 : Side by side のVR180 ステレオ写真
  - mode=3 : 横長パノラマ写真。iPhoneに合わせ縦方向の画角を63度に設定
  - mode=5 : Domemaster形式。床を表示して半球ドームに投影
 
