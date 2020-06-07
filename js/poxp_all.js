@@ -75,6 +75,7 @@ WWG.prototype.init2 = function(canvas,opt) {
 	this.inst_draw = function(m,l,s,o,c){this.gl.drawElementsInstanced(m,l, s, o, c);}
 	this.inst_drawa = function(m,s,o,c) {this.gl.drawArrayInstanced(m, s, o, c);}
 	this.ext_anis = gl.getExtension("EXT_texture_filter_anisotropic");
+	if(this.ext_anis) this.ext_anis_max = gl.getParameter(this.ext_anis.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
 	this.ext_ftex = true ;
 	this.ext_mrt = (gl.getParameter(gl.MAX_DRAW_BUFFERS)>1) ;
 	if(this.ext_mrt) {
@@ -137,9 +138,9 @@ WWG.prototype.Render = function(wwg) {
 	this.wwg = wwg ;
 	this.gl = wwg.gl ;
 	this.env = {} ;
-	this.obuf = [] ;
+//	this.obuf = [] ;
 	this.modelCount = 0 ;
-	this.modelHash = {} ;
+//	this.modelHash = {} ;
 }
 WWG.prototype.Render.prototype.setUnivec = function(uni,value) {
 	if(uni.pos==null) return 
@@ -224,6 +225,7 @@ WWG.prototype.Render.prototype.setUnivec = function(uni,value) {
 			if(typeof value == 'string') value = this.getTexIndex(value)
 			this.gl.activeTexture(this.gl.TEXTURE0+uni.texunit);
 			this.gl.bindTexture(this.gl.TEXTURE_2D, this.texobj[value]);
+			if(this.data.texture[value]==undefined) break ;
 			if(this.data.texture && this.data.texture[value].video) {
 				this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, this.data.texture[value].video);	
 			}
@@ -361,16 +363,19 @@ WWG.prototype.Render.prototype.setUniValues = function(data) {
 WWG.prototype.Render.prototype.genTex = function(img,option) {
 	if(!option) option={flevel:0} ;
 	var gl = this.gl ;
+	const formatstr = {"rgb":gl.RGB,"gray":gl.LUMINANCE,"grayalpha":gl.LUMINANCE_ALPHA}
+	let format = (option.format && formatstr[option.format])?formatstr[option.format]:gl.RGBA
+
 	var tex = gl.createTexture();
 	gl.bindTexture(gl.TEXTURE_2D, tex);
 	if(option.isarray) {
 		if(img instanceof Float32Array ) 
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, option.width,option.height,0,gl.RGBA, gl.FLOAT, img,0);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, option.width,option.height,0,format, gl.FLOAT, img,0);
 		else 
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, option.width,option.height,0,gl.RGBA, gl.UNSIGNED_BYTE, img);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, option.width,option.height,0,format, gl.UNSIGNED_BYTE, img);
 		 option.flevel = 0 
 		 option.nomipmap = true
-	} else 	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,gl.UNSIGNED_BYTE, img);
+	} else 	gl.texImage2D(gl.TEXTURE_2D, 0, format, format,gl.UNSIGNED_BYTE, img);
 
 	if(!option.nomipmap) gl.generateMipmap(gl.TEXTURE_2D);
 	//NEAREST LINEAR NEAREST_MIPMAP_NEAREST NEAREST_MIPMAP_LINEAR LINEAR_MIPMAP_NEAREST LINEAR_MIPMAP_LINEAR
@@ -447,13 +452,15 @@ WWG.prototype.Render.prototype.loadTex = function(tex) {
 	})
 }
 WWG.prototype.Render.prototype.getTexIndex = function(name) {
+	if(!this.data.texture) return null 
 	for(var i=0;i<this.data.texture.length;i++) {
 		if(this.data.texture[i].name==name) break;
 	}
-	return i
+	return (i==this.data.texture.length)?null:i
 }
 WWG.prototype.Render.prototype.addTex = function(texdata) {
 	return new Promise((resolve,reject)=>{
+		if(!this.data.texture) this.data.texture = []
 		this.data.texture.push(texdata)
 		this.loadTex(texdata).then((tex)=>{
 			this.texobj.push(tex) ;
@@ -463,6 +470,7 @@ WWG.prototype.Render.prototype.addTex = function(texdata) {
 }
 WWG.prototype.Render.prototype.removeTex = function(tex) {
 	if(typeof tex == "string") tex = this.getTexIndex(tex) 
+	if(tex === null ) return 
 	this.data.texture[tex] = null
 	this.texobj[tex] = null 
 }
@@ -510,7 +518,7 @@ WWG.prototype.Render.prototype.frameBuffer = function(os) {
 	gl.bindRenderbuffer(gl.RENDERBUFFER, null);
 	gl.bindFramebuffer(gl.FRAMEBUFFER, null);	
 
-	var ret = {width:os.width,height:os.height,f:frameBuffer,d:renderBuffer,t:fTexture}
+	var ret = {ox:os.offsetX,oy:os.offsetY,width:os.width,height:os.height,f:frameBuffer,d:renderBuffer,t:fTexture}
 	if(mrt) ret.fblist = fblist ;
 	return ret ;
 }
@@ -554,8 +562,8 @@ WWG.prototype.Render.prototype.setRender =function(data) {
 		
 				//set model 
 				for(var i =0;i<data.model.length;i++) {
-					self.obuf[i] = self.setObj( data.model[i],true) ;
-					if(data.model[i].name) self.modelHash[data.model[i].name] = i ;
+					data.model[i].obuf = self.setObj( data.model[i],true) ;
+//					if(data.model[i].name) self.modelHash[data.model[i].name] = data.model[i] ;
 				}
 				self.modelCount = data.model.length ;
 //				console.log(self.obuf);
@@ -688,30 +696,46 @@ WWG.prototype.Render.prototype.setObj = function(obj,flag) {
 		
 	return ret ;
 }
+WWG.prototype.Render.prototype.getModels = function() {
+	return this.data.model.filter((m)=>(m!==null))	
+}
 WWG.prototype.Render.prototype.getModelIdx = function(name) {
-	var idx 
+	var idx = false 
 	if(typeof name != 'string') idx = parseInt(name) ;
-	else idx = this.modelHash[name] ;
+	else {
+		for(let i=0;i<this.data.model.length;i++) 	
+			if(name==this.data.model[i].name) {idx = i ;break }
+	}
 	return idx ;	
 }
 // add model
 WWG.prototype.Render.prototype.addModel = function(model) {
+	let idx = false
+	if(model.name) idx = this.getModelIdx(model.name)
+	if(idx!==false ) {
+		this.data.model[idx] = model ;
+		this.data.model[idx].obuf = this.setObj(model,true) ;
+		return 
+	}
 	this.data.model.push(model) ;
-	this.obuf.push(this.setObj(model,true)) ;
+	this.data.model[this.data.model.length-1].obuf = this.setObj(model,true) ;
 	this.modelCount++
-	if(model.name) this.modelHash[model.name] = this.data.model.length -1 ;
+//	if(model.name) this.modelHash[model.name] = this.data.model.length -1 ;
 }
 // remove model
 WWG.prototype.Render.prototype.removeModel = function(model) {
-	let mi = this.getModelIndex(mode) 
+	let mi = this.getModelIdx(model) 
+	if(mi===false) return false 
+//	delete this.modelHash[this.data.model[mi].name] 
+	this.data.model[mi].obuf = null 
 	this.data.model[mi] = null 
-	this.obuf[mi] = null 
 	this.modelCount--  
+	return true 
 }
 // update attribute buffer 
 WWG.prototype.Render.prototype.updateModel = function(name,mode,buf,subflag=true) {
 	var idx = this.getModelIdx(name) ;
-	var obuf = this.obuf[idx] ;
+	var obuf = this.data.model[idx].obuf ;
 	switch(mode) {
 		case "vbo":	
 			this.gl.bindBuffer(this.gl.ARRAY_BUFFER, obuf.vbo) ;
@@ -727,7 +751,7 @@ WWG.prototype.Render.prototype.updateModel = function(name,mode,buf,subflag=true
 }
 WWG.prototype.Render.prototype.updateModelInstance = function(name,buf,count) {
 	var idx = this.getModelIdx(name) ;
-	var obuf = this.obuf[idx] ;
+	var obuf = this.data.model[idx].obuf ;
 	this.data.model[idx].inst.count = count ;
 	this.gl.bindBuffer(this.gl.ARRAY_BUFFER, obuf.inst) ; 
 //		this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, this.f32Array(buf))	
@@ -793,15 +817,16 @@ WWG.prototype.Render.prototype.draw = function(update,cls) {
 	if(this.env.offscreen) {// renderbuffer 
 		gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb.f);
 		if(this.env.offscreen.mrt) this.wwg.mrt_draw(this.fb.fblist);
-		gl.viewport(0,0,this.fb.width,this.fb.height) ;
+		gl.viewport(fb.offsetX,fb.offsetY,this.fb.width,this.fb.height) ;
 	}
 	if(!cls) this.clear() ;
-	for(var b=0;b<this.obuf.length;b++) {
-		if(this.obuf[b]==null) continue ;
-		var cmodel = this.data.model[b] ;
+	let models = this.data.model
+	for(var b=0;b<models.length;b++) {
+		var cmodel = models[b] ;
 		if(cmodel.hide) continue ;
-		var geo = cmodel.geo ;
+		if(cmodel.obuf==null) continue ;
 
+		var geo = cmodel.geo ;
 		this.updateUniValues(0) ;
 		this.pushUniValues(this.data) ;
 		this.pushUniValues(cmodel);
@@ -818,7 +843,7 @@ WWG.prototype.Render.prototype.draw = function(update,cls) {
 		}
 		this.updateUniValues(1)
 
-		var obuf = this.obuf[b] ;
+		var obuf = cmodel.obuf ;
 		var ofs = (geo.ofs>0)?geo.ofs:0 ;
 		if(this.wwg.ext_vao)  this.wwg.vao_bind(obuf.vao);
 		else {
@@ -833,10 +858,10 @@ WWG.prototype.Render.prototype.draw = function(update,cls) {
 				gl.vertexAttribPointer(this.vs_att[obuf.ats[i].name].pos, s, gl.FLOAT, false, obuf.tl*4, aofs);
 				aofs += s*4 ;	
 			}
-			if(this.obuf[b].ibo) gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.obuf[b].ibo) ;
-			if(this.obuf[b].inst) {
+			if(obuf.ibo) gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, obuf.ibo) ;
+			if(obuf.inst) {
 				var inst = cmodel.inst ;
-				gl.bindBuffer(gl.ARRAY_BUFFER, this.obuf[b].inst) ;
+				gl.bindBuffer(gl.ARRAY_BUFFER, obuf.inst) ;
 				var aofs = 0 ;
 				for(var i=0;i<obuf.iats.length;i++) {
 					var divisor = (inst.divisor)?inst.divisor[i]:1 ;
@@ -851,7 +876,7 @@ WWG.prototype.Render.prototype.draw = function(update,cls) {
 		}
 		if(cmodel.preFunction) {
 			
-			cmodel.preFunction(gl,cmodel,this.obuf[b]) ;
+			cmodel.preFunction(gl,cmodel,obuf) ;
 		}
 		if(cmodel.blend!==undefined) {
 			gl.enable(gl.BLEND) ;
@@ -1092,7 +1117,7 @@ class WWModel {
 		for(let j =0; j < div-1 ;j++) {
 			s.push([j,j+1,div]) ;
 		}
-		s.push([j,0,div])
+		s.push([div-1,0,div])
 		break; 
 	case "plane":
 		if(!param.wz)  {
@@ -2830,7 +2855,6 @@ GPad = function() {
 	this.gpadcount = 0 
 	if(!navigator.getGamepads) return false ;
 	gamepads = navigator.getGamepads();
-//	console.log(gamepads)
 	this.gpadcount = gamepads.length
 	return this.gpadcount > 0  
 }
@@ -2839,15 +2863,17 @@ GPad.prototype.init = function(idx,cb) {
 	if(idx==undefined) idx = 0 
 	this.idx = idx 
 	if(!navigator.getGamepads) return false ;
+	let ret = true 
 	gamepads = navigator.getGamepads();
 //	console.log(gamepads)
 	if(gamepads[this.idx]) {
 		console.log("gpad init "+this.idx) ;
 		this.axes =gamepads[this.idx].axes 
-		this.conn = true ;
+		this.conn = false ;
 		this.egp = null ;
 	} else {
 		this.conn = false 
+		ret = false 
 	}
 	addEventListener("gamepadconnected", (e)=> {
 		if(e.gamepad.index != this.idx ) return 
@@ -2882,22 +2908,41 @@ GPad.prototype.init = function(idx,cb) {
 		],
 		axes:[0,0]
 	}
-	return true ;
+	return ret ;
 }
 GPad.prototype.get = function(pad) {
 	var gp 
-	if(!this.conn) {
+	if(POXPDevice && POXPDevice.WebXR) {
+		if(POXPDevice.isPresenting && POXPDevice.session.inputSources) {
+		const is = POXPDevice.session.inputSources
+//		console.log(is)
+		for (let i=0;i<=is.length-1;i++) {
+			if (is[i].gamepad && is[i].gamepad.mapping=="xr-standard") {
+				is[i].gamepad.hand = is[i].handedness
+				if (is[i].handedness=="left" && this.idx==1) gp = is[i].gamepad 
+				if (is[i].handedness=="right" && this.idx==0) gp = is[i].gamepad 
+
+				if(gp) {
+					let pose = POXPDevice.vrFrame.getPose(is[i].gripSpace,POXPDevice.referenceSpace)
+					if(pose) {
+						gp.pose = {}
+						if(pose.transform.orientation) gp.pose.orientation = [pose.transform.orientation.x,pose.transform.orientation.y,pose.transform.orientation.z,pose.transform.orientation.w]
+						if(pose.transform.position) gp.pose.position =  [pose.transform.position.x,pose.transform.position.y,pose.transform.position.z]
+					console.log(pose)
+					}
+					this.conn = true 
+					break 
+				} else this.conn = false 					
+			}	
+		}
+		} else this.conn = false 
+	} 
+	if(!gp) {
 		if(this.egp==null) return null ;	
 		gp = this.egp
-	} else {
-		var gamepads = navigator.getGamepads();
-//		console.log(gamepads)
-		this.gamepads = gamepads 
-		var gp = gamepads[this.idx];
-		if(!gp || gp.buttons.length==0) return null ;
-	}
-	
+	} 
 	var lgp = this.lastGp 
+	gp.conn = this.conn 
 	gp.bf = false 
 	gp.pf = false 
 	gp.tf = false 
@@ -2919,15 +2964,21 @@ GPad.prototype.get = function(pad) {
 											touched:gp.buttons[i].touched}
 	}
 	const th = 0.5 
-	for(var i=0;i<gp.axes.length;i++) {
+	const eps = 0.001 
+	let axes = [gp.axes[0],gp.axes[1],gp.axes[2],gp.axes[3]]
+	if(gp.axes[2]!==undefined) axes[0] = gp.axes[2]
+	if(gp.axes[3]!==undefined) axes[1] = gp.axes[3]
+	for(var i=0;i<axes.length;i++) {
+		if(Math.abs(axes[i]) < eps ) gp.axes[i] = 0 
 		gp.dpad[i] = 0 
 		if(lgp) {
-			if(Math.abs(lgp.axes[i])<th && Math.abs(gp.axes[i])>=th) {gp.dpad[i] = 1;gp.pf=true}
-			if(Math.abs(lgp.axes[i])>=th && Math.abs(gp.axes[i])<th) {gp.dpad[i] = -1;gp.pf=true}
+			if(Math.abs(lgp.axes[i])<th && Math.abs(axes[i])>=th) {gp.dpad[i] = 1;gp.pf=true}
+			if(Math.abs(lgp.axes[i])>=th && Math.abs(axes[i])<th) {gp.dpad[i] = -1;gp.pf=true}
 		}
-		lgp.axes[i] = gp.axes[i]
+		lgp.axes[i] = axes[i]
 	}
 	this.gp = gp 
+
 	if(this.ev && (gp.bf || gp.pf || gp.tf)){
 		this.ev(gp) 
 	}
@@ -3401,6 +3452,7 @@ WBind.set = function(data,root) {
 // property str,src ,rect,x,y,width,height 
 // styles radius,color,border,background,lineWidth,font,lineHeight,align,offsetx,offsety
 //
+//export {json2canvas}
 class json2canvas {
 
 constructor(can) {
@@ -3696,7 +3748,7 @@ static loadFont(name,path) {
 const Mat4 = CanvasMatrix4 // alias
 const RAD = Math.PI/180 ;
 const PoxPlayer  = function(can,opt) {
-	this.version = "1.3.0" 
+	this.version = "2.1.0" 
 	if(!Promise) {
 		alert("This browser is not supported!!") ;
 		return null ;		
@@ -3706,8 +3758,9 @@ const PoxPlayer  = function(can,opt) {
 
 	// wwg initialize
 	const wwg = new WWG() ;
+	const initopt = {preserveDrawingBuffer: opt.capture,antialias:true, xrCompatible: true }
 	const useWebGL2 = !opt.noWebGL2
-	if(!(useWebGL2 && wwg.init2(this.can,{preserveDrawingBuffer: opt.capture,antialias:true})) && !wwg.init(this.can,{preserveDrawingBuffer: opt.capture,antialias:true})) {
+	if(!(useWebGL2 && wwg.init2(this.can,initopt)) && !wwg.init(this.can,initopt)) {
 		alert("wgl not supported") ;
 		return null ;
 	}
@@ -3727,12 +3780,35 @@ const PoxPlayer  = function(can,opt) {
 	Param.bindInput("camselect",(opt.ui && opt.ui.camselect)?opt.ui.camselect:"#camselect") ;
 	
 	this.pixRatio = 1 
-	this.pox = {} ;
+	this.pox = {can:this.can,wwg:this.wwg,synth:this.synth,poxp:this} ;
 	this.eventListener = {
 		frame:[],
 		gpad:[]
 	}
 
+	if(window.GPad) {
+		this.pox.gPad = new GPad()
+		this.pox.gPad.name = "1"
+		this.pox.gPad2 = new GPad()
+		this.pox.gPad2.name = "2"
+		if(!this.pox.gPad.init(0,(pad,f)=>{
+			if(f) {
+				this.pox.log("set 1"+pad.gp.hand)
+			}
+		}))
+		if(!this.pox.gPad2.init(1,(pad,f)=>{
+			if(f) {
+				this.pox.log("set 2"+pad.gp.hand)
+			}
+		}))
+//		console.log(this.pox.gPad)
+		this.pox.gPad.ev = (pad)=> {
+			ret = this.callEvent("gpad",pad) ;
+		}
+		this.pox.gPad2.ev = (pad,b,p)=> {
+			ret = this.callEvent("gpad",pad) ;
+		}
+	}
 	// canvas initialize
 	this.resize() ;
 	window.addEventListener("resize",()=>{this.resize()}) ;
@@ -3750,7 +3826,10 @@ const PoxPlayer  = function(can,opt) {
 
 	this.setEvent() ;
 	// VR init 
-	POXPDevice.checkVR(this)
+	POXPDevice.checkVR(this).then(f=>{
+		if(f) console.log((POXPDevice.vrDisplay)?"WebVR":"WebXR"+" supported")
+		this.vrReady = f 
+	})
 	//create default camera
 
 	this.cam0 = this.createCamera()
@@ -3777,9 +3856,13 @@ PoxPlayer.prototype.removeEvent = function(ev) {
 	this.eventListener.frame = this.eventListener.frame.filter((e)=>(e!==ev))
 	this.eventListener.gpad = this.eventListener.gpad.filter((e)=>(e!==ev))
 }
+PoxPlayer.prototype.clearEvent = function() {
+	this.eventListener.frame = []
+	this.eventListener.gpad = []
+}
 PoxPlayer.prototype.enterVR = function() {
 	let ret = true
-	if(this.vrDisplay) {
+	if(POXPDevice.VRReady) {
 		console.log("enter VR")
 		POXPDevice.presentVR(this)
 	} else if(document.body.webkitRequestFullscreen) {
@@ -3801,7 +3884,7 @@ PoxPlayer.prototype.enterVR = function() {
 	return ret 
 }
 PoxPlayer.prototype.exitVR = function() {
-	if(this.vrDisplay) {
+	if(POXPDevice.VRReady) {
 		POXPDevice.closeVR(this)
 	}
 }
@@ -3860,7 +3943,7 @@ PoxPlayer.prototype.setEvent = function() {
 			return false ;
 		},
 		gyro:(ev)=> {
-			if(!this.ccam || Param.pause || this.vrDisplay ) return true;
+			if(!this.ccam || Param.pause || POXPDevice.VRReady ) return true;
 			if(dragging) return true ;
 			let ret = true ;
 			ret = this.callEvent("gyro",ev) ;
@@ -3915,7 +3998,7 @@ PoxPlayer.prototype.setEvent = function() {
 PoxPlayer.prototype.resize = function() {
 //	console.log("wresize:"+document.body.offsetWidth+" x "+document.body.offsetHeight);
 	if(this.can.offsetWidth < 300 || 
-		(this.vrDisplay && this.vrDisplay.isPresenting)) return 
+		(POXPDevice.isPresenting)) return 
 	this.can.width= this.can.offsetWidth*this.pixRatio*window.devicePixelRatio  ;
 	this.can.height = this.can.offsetHeight*this.pixRatio*window.devicePixelRatio  ;
 	console.log("canvas:"+this.can.width+" x "+this.can.height);		
@@ -3984,37 +4067,15 @@ PoxPlayer.prototype.loadImage = function(path) {
 PoxPlayer.prototype.set = async function(d,param={},uidom) { 
 	const VS = d.vs ;
 	const FS = d.fs ;
-	this.pox  = {src:d,can:this.can,wwg:this.wwg,synth:this.synth,param:param,poxp:this} ;
-	const POX = this.pox ;
-	if(window.GPad) {
-		POX.gPad = new GPad()
-		POX.gPad2 = new GPad()
-		POX.leftPad = POX.gPad 
-		POX.rightPad = POX.gPad2 
-		POX.gPad.init(0,(pad,f)=>{
-			if(f) {
-				if(pad.gp.hand=="left") POX.leftPad = pad 
-				else if(pad.gp.hand=="right") POX.rightPad = pad
-				else  POX.rightPad = pad
-			}
-		})
-		POX.gPad2.init(1,(pad,f)=>{
-			if(f) {
-				if(pad.gp.hand=="left") POX.leftPad = pad 
-				if(pad.gp.hand=="right") POX.rightPad = pad 
-			}
-		})
-//		console.log(this.pox.gPad)
-		this.pox.gPad.ev = (pad)=> {
-			ret = this.callEvent("gpad",pad) ;
-		}
-		this.pox.gPad2.ev = (pad,b,p)=> {
-			ret = this.callEvent("gpad",pad) ;
-		}
-	}
+	this.pox.src = d 
+	this.pox.param = param 
+	const POX = this.pox
 
 	POX.loadImage = this.loadImage 
 	POX.loadAjax = this.wwg.loadAjax
+	POX.addEvent = (e,f) => this.addEvent(e,f)
+	POX.exitVR = this.exitVR 
+	
 	POX.V3add = function() {
 		let x=0,y=0,z=0 ;
 		for(let i=0;i<arguments.length;i++) {
@@ -4048,12 +4109,16 @@ PoxPlayer.prototype.set = async function(d,param={},uidom) {
 	POX.log = (msg)=> {
 		if(this.errCb) this.errCb(msg) ;
 	}
+	POX.addModel = (model)=>{ if(this.render) return this.render.addModel(model) }
+	POX.removeModel = (model)=>{ if(this.render) return this.render.removeModel(model) }
+	POX.getModelData = (model)=>{ if(this.render) return this.render.getModelData(model) }
 //	this.parseJS(d.m).then((m)=> {
-	const m = await this.parseJS(d.m) ;
+	if(typeof d.m  == "string") {
+		const m = await this.parseJS(d.m) ;
 		try {
 			POX.eval = new Function("POX",'"use strict";'+m)
 		}catch(err) {
-//			console.log(err)
+			console.log(err)
 			this.emsg = ("parse error "+err.stack);
 //			throw new Error('reject!!')
 			return(null);
@@ -4067,23 +4132,33 @@ PoxPlayer.prototype.set = async function(d,param={},uidom) {
 //			throw new Error('reject!!2')
 			return(null);
 		}
-		if(POX.setting.needWGL2 && this.wwg.version!=2) {
-			this.emsg = "needs WebGL 2.0"
-			return(null)
+	} else if(d.m.constructor === Function) {
+		try {
+			d.m(POX)
+		}catch(err) {
+//			console.log(err.stack)
+			this.emsg = ("eval error "+err.stack);
+//			throw new Error('reject!!2')
+			return(null);
 		}
+	}
+	if(POX.setting.needWGL2 && this.wwg.version!=2) {
+		this.emsg = "needs WebGL 2.0"
+		return(null)
+	}
 
-		if(uidom) this.setParam(uidom)
-		if(POX.init) {
-			try {
-				await POX.init()
-			}catch(err) {
+	if(uidom) this.setParam(uidom)
+	if(POX.init) {
+		try {
+			await POX.init()
+		}catch(err) {
 //				console.log(err)
-				this.emsg = ("init error "+err.stack);
+			this.emsg = ("init error "+err.stack);
 //				throw new Error('reject!!2')
-				return null
-			}
+			return null
 		}
-		return(POX) ;
+	}
+	return(POX) ;
 }
 PoxPlayer.prototype.parseJS = function(src) {
 
@@ -4128,6 +4203,14 @@ PoxPlayer.prototype.callEvent = function(kind,ev,opt) {
 		ret = this.pox.event(kind,ev,opt)
 	} catch(err) {
 		this.errCb(err.stack)
+	}
+	if(kind=="gpad") {
+		for(let i=0;i<this.eventListener.gpad.length;i++) {	//attached event
+			const f = this.eventListener.gpad[i]
+			if(f.active) {
+				f.cb({gpad:ev})
+			}
+		}		
 	}
 	return ret 
 }
@@ -4215,7 +4298,7 @@ PoxPlayer.prototype.setScene = function(sc) {
 	pox.render = r ;
 
 	let ccam = this.ccam
-	pox.cam = this.cam1.cam ;
+	
 	this.isVR = false 
 	const self = this 
 	const bm = new CanvasMatrix4()
@@ -4240,6 +4323,7 @@ PoxPlayer.prototype.setScene = function(sc) {
 		if(pox.setting.cam) this.cam1.setCam(pox.setting.cam)
 //		if(ccam.cam.camMode=="walk") this.keyElelment.focus() ;
 		this.keyElelment.value = "" ;
+		this.clearEvent()
 		
 		resolve()
 		//draw loop
@@ -4251,16 +4335,10 @@ PoxPlayer.prototype.setScene = function(sc) {
 		let ft = st ;
 		let fc = 0 ;
 		let gpad 
-		const loopf = () => {
+		const loopf = (timestamp,frame) => {
 //			console.log("************loop")
-			if(this.vrDisplay && this.vrDisplay.isPresenting) {
-				this.loop = this.vrDisplay.requestAnimationFrame(loopf)
-				this.isVR = true 
+			POXPDevice.animationFrame(this,loopf,frame)
 
-			} else {
-				this.loop = window.requestAnimationFrame(loopf) ;
-				this.isVR = false ;
-			}
 			const ct = new Date().getTime() ;
 			this.ctime = ct 
 			if(Param.pause) {
@@ -4279,17 +4357,44 @@ PoxPlayer.prototype.setScene = function(sc) {
 			}
 			this.ccam = (Param.camselect)?this.cam0:this.cam1
 			ccam = this.ccam 
+			pox.cam = ccam.cam ;
 
 			if(Param.autorot) ccam.setCam({camRY:(rt/100)%360}) ;
-			if(pox.gPad) {	
-				const rp = (pox.rightPad)?pox.rightPad.get():null
-				const lp = (pox.leftPad)?pox.leftPad.get():null
-				if(ccam.cam.gPad && rp!=null ) ccam.setPad( rp,lp )
+			let rp=null,lp=null,pp=null,sp=null
+			if(pox.gPad) {
+				let p1 = pox.gPad.get()
+				let p2 = pox.gPad2.get() 
+				if(this.isVR) {
+					if(p1.conn && p1.hand == "right") rp = p1 ;
+					if(p1.conn && p1.hand == "left") lp = p1 ;
+					if(p2.conn && p2.hand == "right") rp = p2 ;
+					if(p2.conn && p2.hand == "left") lp = p2 
+				} else {
+					if(p1.hand == "right" ) rp = p1
+					if(p2.hand == "right" ) rp = p2				
+					if(p1.hand == "left" ) lp = p1
+					if(p2.hand == "left" ) lp = p2
+				}
+				if(sset.primaryPad=="left") pp = lp,sp = rp
+				else pp=rp,sp=lp
+				if(pp==null) pp = sp, sp = null 
+				if(ccam.cam.gPad) ccam.setPad(pp,sp)
 			}
 			ccam.update()	// camera update
-			update(r,pox,this.cam1.cam,rt) ; // scene update 
+			let camm = ccam.getMtx(sset.scale,(Param.isStereo || self.isVR)?1:0) ;
+			
+			for(let i=0;i<this.eventListener.frame.length;i++) {	//attached event
+				const f = this.eventListener.frame[i]
+				if(f.active) {
+					f.cb({render:r,pox:pox,ccam:ccam,cam:ccam.cam,rtime:rt,
+						rightPad:rp,leftPad:lp,primaryPad:pp,secondaryPad:sp})
+				}
+			}
+			let upd = {}
+			if(pox.update)  upd = pox.update(r,ccam.cam,rt,-1)
 			Param.updateTimer() ;
-			if(this.vrDisplay && this.vrDisplay.isPresenting) this.vrDisplay.submitFrame()
+			update(r,pox,camm,rt,upd) ; // scene update 
+			POXPDevice.submitFrame(this)
 			this.ltime = ct 
 			this.rtime = rt 
 		}
@@ -4301,15 +4406,31 @@ PoxPlayer.prototype.setScene = function(sc) {
 	})
 	}) // promise
 	
+	function getParentMtx(render,parent) {
+		let p = render.getModelData(parent) 
+		if(!p) return new Mat4() 
+		let mm = new Mat4(p.bm)
+		if(!mm) mm = new Mat4() 
+		if(p.mm) mm.multRight(p.mm)
+		if(p.parent!==undefined) {
+			mm.multRight( getParentMtx(render,p.parent)) 
+		} 
+		return mm 
+	}
 	// calc model matrix
 	function modelMtx2(render,camm) {
 
 		// calc each mvp matrix and invert matrix
-		const mod = [[],[]] ;		
-		for(let i=0;i<render.modelCount;i++) {
-			let d = render.getModelData(i) ;
+		const mod = [[],[]] ;	
+		const models = render.data.model 	
+		for(let i=0;i<models.length;i++) {
+			let d = models[i] ;
+			if(!d) continue 
 			bm.load(d.bm)
 			if(d.mm) bm.multRight(d.mm) ;
+			if(d.parent!==undefined) {
+				bm.multRight( getParentMtx(render,d.parent ))
+			}
 			if(render.data.group) {
 				let g = render.data.group ;
 				for(let gi = 0 ;gi < g.length;gi++) {
@@ -4377,24 +4498,36 @@ PoxPlayer.prototype.setScene = function(sc) {
 	}
 	// update scene
 
-	function update(render,pox,cam,time) {
+	function update(render,pox,camm,time,update) {
 		// draw call 
-		let camm,update = {} ;
+
+		render.data.model.sort((a,b)=>{
+			let al = a.layer, bl = b.layer 
+			if(al===undefined) al = 0 
+			if(bl===undefined) bl = 0 
+			return al- bl  
+		}) 
+
 		if(Param.isStereo || self.isVR) {
-			if(!Param.pause) update = pox.update(render,cam,time,-1)
-			camm = ccam.getMtx(sset.scale,1) ;
+			let vp = POXPDevice.getViewport(can)
+			if(POXPDevice.WebXR && POXPDevice.isPresenting) {
+//				console.log("fbs")
+				render.gl.bindFramebuffer(render.gl.FRAMEBUFFER,POXPDevice.webGLLayer.framebuffer)
+			}
 			let mtx2 = modelMtx2(render,camm) ;
 			if(update.vs_uni===undefined) update.vs_uni = {} ;
 			if(update.fs_uni===undefined) update.fs_uni = {} ;
 			update.fs_uni.time = time/1000 ;
 			update.vs_uni.time = time/1000 ;			
-			render.gl.viewport(0,0,can.width/2,can.height) ;			
+			render.gl.viewport(vp.leftViewport.x,vp.leftViewport.y, vp.leftViewport.width,vp.leftViewport.height) ;
 			render.draw([update,mtx2[0]],false) ;
-			render.gl.viewport(can.width/2,0,can.width/2,can.height) ;
+			render.gl.viewport(vp.rightViewport.x,vp.rightViewport.y, vp.rightViewport.width,vp.rightViewport.height) ;
 			render.draw([update,mtx2[1]],true) ;
+			if(POXPDevice.WebXR && POXPDevice.isPresenting) {
+//				console.log("fbe")
+				render.gl.bindFramebuffer(render.gl.FRAMEBUFFER,null)
+			}
 		} else {
-			if(!Param.pause) update = pox.update(render,cam,time,0)
-			camm = ccam.getMtx(sset.scale,0) ;
 			let mtx2 = modelMtx2(render,camm) ;
 			if(update.vs_uni===undefined) update.vs_uni = {} ;
 			if(update.fs_uni===undefined) update.fs_uni = {} ;
@@ -4407,20 +4540,40 @@ PoxPlayer.prototype.setScene = function(sc) {
 	}
 }
 const POXPDevice = {
+	VRReady:false,
+	isPresenting:false,
+	WebXR:false ,
 	checkVR:function(poxp) {
 		return new Promise( (resolve,reject)=>{
+			// for WebXR
+			if(navigator.xr) {
+				navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+					POXPDevice.VRReady = supported 
+					POXPDevice.WebXR = supported 
+					resolve(supported)       	
+				}).catch((err)=>{
+					console.log(err)
+					resolve(false)
+				});
+			} else
 			// for WebVR
 			if(navigator.getVRDisplays) {
+				if(window.VRFrameData!=undefined) POXPDevice.vrFrame = new VRFrameData()
 				navigator.getVRDisplays().then((displays)=> {
-					poxp.vrDisplay = displays[displays.length - 1]
-					console.log(poxp.vrDisplay)
+					console.log("VR init with WebVR")
+					POXPDevice.vrDisplay = displays[displays.length - 1]
+					console.log(POXPDevice.vrDisplay)
+					POXPDevice.VRReady = true 
+//					poxp.vrDisplay = POXPDevice.vrDisplay
 					window.addEventListener('vrdisplaypresentchange', ()=>{
-						console.log("vr presenting= "+poxp.vrDisplay.isPresenting)
-						if(poxp.vrDisplay.isPresenting) {
+						console.log("vr presenting= "+POXPDevice.vrDisplay.isPresenting)
+						if(POXPDevice.vrDisplay.isPresenting) {
 							poxp.callEvent("vrchange",1)
+							POXPDevice.isPresenting = true 
 						} else {
 							poxp.resize() ;
 							poxp.callEvent("vrchange",0)
+							POXPDevice.isPresenting = false 
 						}
 					}, false);
 					window.addEventListener('vrdisplayactivate', ()=>{
@@ -4429,40 +4582,160 @@ const POXPDevice = {
 					window.addEventListener('vrdisplaydeactivate', ()=>{
 						console.log("vr deactive")
 					}, false);
+					resolve(true)
+				}).catch((err)=> {
+					reject(err)
 				})
+			} else {
+				resolve(false)
 			}
-			
 		})
 	},
 	presentVR:function(poxp) {
 		return new Promise( (resolve,reject)=>{
-			const p = { source: poxp.can,attributes:{} }
-			if(poxp.pox.setting.highRefreshRate!==undefined) p.attributes.highRefreshRate = poxp.pox.setting.highRefreshRate
-			if(poxp.pox.setting.foveationLevel!==undefined) p.attributes.foveationLevel = poxp.pox.setting.foveationLevel
-			poxp.vrDisplay.requestPresent([p]).then( () =>{
-				console.log("present ok")
-				const leftEye = poxp.vrDisplay.getEyeParameters("left");
-				const rightEye = poxp.vrDisplay.getEyeParameters("right");
-				poxp.can.width = Math.max(leftEye.renderWidth, rightEye.renderWidth) * 2;
-				poxp.can.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
-				if(poxp.vrDisplay.displayName=="Oculus Go") {
-					poxp.can.width = 2560
-					poxp.can.height = 1280
-				}
-				poxp.can.width= poxp.can.width * poxp.pixRatio 
-				poxp.can.height= poxp.can.height * poxp.pixRatio 
-				poxp.pox.log(poxp.vrDisplay.displayName)
-				poxp.pox.log("vr canvas:"+poxp.can.width+" x "+poxp.can.height);
-			}).catch((err)=> {
-				console.log(err)
-			})		
-		
+			// for WebXR
+			if(POXPDevice.WebXR) {
+				navigator.xr.requestSession("immersive-vr").then(function(xrSession) {
+					POXPDevice.session=xrSession
+					POXPDevice.isPresenting = true
+					console.log("vr start")
+					xrSession.updateRenderState(
+						{ baseLayer: new XRWebGLLayer(xrSession,poxp.wwg.gl)});
+					xrSession.requestReferenceSpace("local").then((xrReferenceSpace) => {
+						POXPDevice.referenceSpace=xrReferenceSpace;
+						POXPDevice.session.requestAnimationFrame(POXPDevice.loopf);
+						poxp.callEvent("vrchange",1)
+					});
+					xrSession.addEventListener("end", (ev)=>{
+							POXPDevice.session=null
+							POXPDevice.isPresenting = false
+							console.log("VR end")
+//							poxp.loop = window.requestAnimationFrame(POXPDevice.loopf) ;
+							poxp.callEvent("vrchange",0)
+					})
+				});
+			} else 
+			// for WebVR
+			if(POXPDevice.vrDisplay) {
+				const p = { source: poxp.can,attributes:{} }
+				if(poxp.pox.setting.highRefreshRate!==undefined) p.attributes.highRefreshRate = poxp.pox.setting.highRefreshRate
+				if(poxp.pox.setting.foveationLevel!==undefined) p.attributes.foveationLevel = poxp.pox.setting.foveationLevel
+				POXPDevice.vrDisplay.requestPresent([p]).then( () =>{
+					console.log("present ok")
+					const leftEye = POXPDevice.vrDisplay.getEyeParameters("left");
+					const rightEye = POXPDevice.vrDisplay.getEyeParameters("right");
+					poxp.can.width = Math.max(leftEye.renderWidth, rightEye.renderWidth) * 2;
+					poxp.can.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
+					if(POXPDevice.vrDisplay.displayName=="Oculus Go") {
+						poxp.can.width = 2560
+						poxp.can.height = 1280
+					}
+					poxp.can.width= poxp.can.width * poxp.pixRatio 
+					poxp.can.height= poxp.can.height * poxp.pixRatio 
+					poxp.pox.log(POXPDevice.vrDisplay.displayName)
+					poxp.pox.log("vr canvas:"+poxp.can.width+" x "+poxp.can.height);
+				}).catch((err)=> {
+					console.log(err)
+				})
+			}
 		})
 	},
 	closeVR:function(poxp) {
-		poxp.vrDisplay.exitPresent().then( () =>{
-			console.log("VR end")
-		})
+		// for WebXR
+		if(POXPDevice.WebXR) {
+			console.log("vr closing")
+			POXPDevice.isPresenting = false
+			POXPDevice.session.end()
+		}
+		// for WebVR
+		if(POXPDevice.vrDisplay) {
+			POXPDevice.vrDisplay.exitPresent().then( () =>{
+				console.log("VR end")
+			})
+		}
+	},
+	animationFrame:function(poxp,loopf,vrframe) {
+		POXPDevice.loopf = loopf 
+		if(POXPDevice.isPresenting ) {
+			if(!vrframe) return 
+			// for WebXR
+			if(POXPDevice.WebXR) {
+				POXPDevice.session.requestAnimationFrame(loopf);
+				POXPDevice.vrFrame = vrframe 
+				poxp.isVR = true 
+//				console.log("vrframe")
+			// for WebVR
+			} else if(POXPDevice.vrDisplay && POXPDevice.vrDisplay.isPresenting) {
+				poxp.loop = POXPDevice.vrDisplay.requestAnimationFrame(loopf)
+				poxp.isVR = true 
+			}
+		} else {
+//			console.log("no vrframe")
+			poxp.loop = window.requestAnimationFrame(loopf) ;
+			poxp.isVR = false ;
+		}
+	},
+	submitFrame:function(poxp) {
+		// for WebXR
+		if(POXPDevice.WebXR) {
+		}
+		// for WebVR
+		if(POXPDevice.vrDisplay) {
+			if(POXPDevice.vrDisplay.isPresenting) POXPDevice.vrDisplay.submitFrame()
+		}
+	},
+	getFrameData:function(poxp) {
+		// for WebXR
+		if(POXPDevice.WebXR && POXPDevice.vrFrame) {
+//			console.log("getframe")
+			let pose=POXPDevice.vrFrame.getViewerPose(POXPDevice.referenceSpace);
+			pose.orientation = [pose.transform.orientation.x,pose.transform.orientation.y,pose.transform.orientation.z,pose.transform.orientation.w]
+			pose.position = [pose.transform.position.x,pose.transform.position.y,pose.transform.position.z]
+			let frame = {pose:pose}
+			let webGLLayer=POXPDevice.session.renderState.baseLayer;
+//			console.log(webGLLayer)
+			POXPDevice.webGLLayer = webGLLayer
+			for (let i=0;i<=pose.views.length-1;i++)
+			{
+				var viewport=webGLLayer.getViewport(pose.views[i]);
+				if(i==1) {
+					frame.rightViewMatrix = pose.views[i].transform.inverse.matrix
+					frame.rightProjectionMatrix = pose.views[i].projectionMatrix
+					frame.rightViewport = viewport 
+				} else {
+					frame.leftViewMatrix = pose.views[i].transform.inverse.matrix
+					frame.leftProjectionMatrix = pose.views[i].projectionMatrix	
+					frame.leftViewport = viewport 			
+				}
+			}
+			POXPDevice.viewport = {leftViewport:frame.leftViewport,rightViewport:frame.rightViewport}
+//			console.log(frame)
+			return frame 
+		}
+		// for WebVR
+		if(POXPDevice.vrDisplay) {
+			POXPDevice.vrDisplay.getFrameData(POXPDevice.vrFrame)
+			return POXPDevice.vrFrame
+		}
+	},
+	getViewport:function(can) {
+		if(POXPDevice.WebXR && POXPDevice.isPresenting)
+			return POXPDevice.viewport
+		else 
+			return {leftViewport:{x:0,y:0,width:can.width/2,height:can.height},
+							rightViewport:{x:can.width/2,y:0,width:can.width/2,height:can.height}}
+	},
+	setDepth:function(camDepth) {
+		// for WebXR
+		if(!POXPDevice.isPresenting) return
+		if(POXPDevice.WebXR) {
+			POXPDevice.session.updateRenderState({depthNear:camDepth.camNear, depthFar:camDepth.camFar})
+		}
+		// for WebVR
+		if(POXPDevice.vrDisplay) {
+			POXPDevice.vrDisplay.depthNear = camDepth.camNear 
+			POXPDevice.vrDisplay.depthFar = camDepth.camFar 
+		}
 	}
 }// poxplayercamera object
 PoxPlayer.prototype.createCamera = function(cam) {
@@ -4492,12 +4765,12 @@ PoxPlayer.prototype.Camera = function(poxp,cam) {
 		camGyro:true, // use gyro
 		gPad:true, //use gpad
 		sbase:0.06, 	//streobase 
-		moveSpeed:0.05,
+		moveSpeed:1.3,		// m/sec
 		rotAngle:30,
 		moveY:false,
 		padMoveUD:true,
 		padRot:true,
-		cv:[0,0,0]	//head direction
+		headVec:[0,0,0]	//head direction
 	} ;
 	for(let i in cam) {
 		this.cam[i] = cam[i] ;
@@ -4516,13 +4789,24 @@ PoxPlayer.prototype.Camera = function(poxp,cam) {
 	this.camV =  [new CanvasMatrix4(),new CanvasMatrix4()]
 	this.vrv =  [new CanvasMatrix4(),new CanvasMatrix4()]
 	this.vrp =  [new CanvasMatrix4(),new CanvasMatrix4()]
-	if(window.VRFrameData!=undefined) this.vrFrame = new VRFrameData()
+	this.tempM =  new CanvasMatrix4()
+	this.pvy = false 
+	this.pvx = false 
+//	if(window.VRFrameData!=undefined) this.vrFrame = new VRFrameData()
 }
 PoxPlayer.prototype.Camera.prototype.setCam = function(cam) {
 	for(let i in cam) {
 		this.cam[i] = cam[i] ;
 	}
 	this.cama = false 
+}
+PoxPlayer.prototype.Camera.prototype.getCam = function() {
+	let bpos = [this.cam.camCX,this.cam.camCY,this.cam.camCZ]
+	let pos = bpos.slice()
+	if(this.cam.position) {
+		pos[0] += this.cam.position[0],pos[1] += this.cam.position[1],pos[2] += this.cam.position[2]
+	}
+	return {origin:bpos,position:pos,head:this.cam.headVec.slice(),hpos:this.cam.position}
 }
 PoxPlayer.prototype.Camera.prototype.event = function(ev,m) {
 	const mag = 300*this.poxp.pixRatio /this.poxp.can.width;
@@ -4576,7 +4860,7 @@ PoxPlayer.prototype.Camera.prototype.event = function(ev,m) {
 			break ;
 		case "keydown":
 			const z = this.cam.camd ;
-			const keymag= 0.2 ;
+			const keymag= this.cam.moveSpeed ;
 			let md = "" ;
 			this.keydown = true ;
 			if(m.altKey) {
@@ -4608,7 +4892,6 @@ PoxPlayer.prototype.Camera.prototype.event = function(ev,m) {
 						break ;
 				
 					case "w":
-					case " ":
 						md = "f" ; break ;
 					case "s":
 						md = "b" ;break ;
@@ -4675,7 +4958,7 @@ PoxPlayer.prototype.Camera.prototype.event = function(ev,m) {
 		}
 }
 PoxPlayer.prototype.Camera.prototype.update = function(time) {
-	const ft = (this.poxp.ctime - this.poxp.ltime)*6/100
+	const ft = (this.poxp.ctime - this.poxp.ltime)/1000
 //console.log(ft)
 	if(this.cam.camMode!="fix") {
 		this.cam.camRX += this.vrx ;
@@ -4705,41 +4988,35 @@ PoxPlayer.prototype.Camera.prototype.update = function(time) {
 	}
 }
 PoxPlayer.prototype.Camera.prototype.setPad = function(gpad,gpad2) {
-	let gp = gpad
-	if(gp.bf || gp.pf ) {
-		let cx =0,cy =0,cz=1
-		if(this.cam.orientation ) {
-			let x = this.cam.orientation[0] ;
-			let y = this.cam.orientation[1] ;
-			let z = this.cam.orientation[2] ;
-			let w = this.cam.orientation[3] ;
-			cx = -2*(-x*z-y*w) 
-			cy = -2*(-y*z+x*w)
-			cz = -(x*x+y*y-z*z-w*w)
-			let l = Math.hypot(cx,cy,cz)
-			cx /= l ,cy /=l, cz /= l 
-		}
-		let cmat = new Mat4().rotate(-this.cam.camRX,1,0,0).rotate(-this.cam.camRY,0,1,0)
-		this.cam.cv = cmat.multVec4(cx,cy,cz,0)
-	}
+	let gp = gpad?gpad:gpad2
+	if(!gp) return 
 	if(this.cam.camMode=="walk") {
-		if(this.cam.padMoveUD && gp.buttons[0] && gp.buttons[0].pressed) {
-			this.vcy = -gp.axes[1]*this.cam.moveSpeed
-		} else {
+		let axes = [gp.axes[0],gp.axes[1]]
+		if(gp.axes[2]!=undefined && gp.axes[2]!=0) axes[0] = gp.axes[2]
+		if(gp.axes[3]!=undefined && gp.axes[3]!=0) axes[1] = gp.axes[3]
+		if(this.cam.padMoveUD && gp.buttons[1] && gp.buttons[1].pressed) {
+			this.vcy = -axes[1]*this.cam.moveSpeed
+			this.pvy = true ;
+			return
+		} else if(this.pvy) {
 			this.vcy = 0 
-			let m = gp.buttons[2] && gp.buttons[2].pressed
-			let mv = (m)?this.cam.moveSpeed*5:this.cam.moveSpeed
-
-			if(Math.abs(gp.axes[0])<Math.abs(gp.axes[1])) {
-				this.vcx = this.cam.cv[0] * gp.axes[1]*mv
-				if(this.cam.moveY) this.vcy = this.cam.cv[1] * gp.axes[1]*mv
-				this.vcz = this.cam.cv[2] * gp.axes[1]*mv
-			} else {
+			this.pvy = false
+		}
+		let m = gp.buttons[2] && gp.buttons[2].pressed
+		let mv = (m)?this.cam.moveSpeed*5:this.cam.moveSpeed
+		if(Math.abs(axes[0])<Math.abs(axes[1]) && Math.abs(axes[1])>0 ) {
+				this.vcx = -this.cam.headVec[0] * axes[1]*mv
+				if(this.cam.moveY) this.vcy = -this.cam.headVec[1] * gp.axes[3]*mv
+				this.vcz = -this.cam.headVec[2] * axes[1]*mv
+				this.pvx = true
+				return 
+		} else if(this.pvx) {		
 				this.vcx = 0 
 				this.vcz = 0 
-				if(this.cam.padRot && gp.dpad[0]>0) 
-					this.cam.camRY += ((gp.axes[0]>0)?1:-1) * this.cam.rotAngle
-			}
+				this.pvx = false 
+		}
+		if(this.cam.padRot && gp.dpad[0]>0) {
+			this.cam.camRY += ((axes[0]>0)?1:-1) * this.cam.rotAngle
 		}
 	}
 }
@@ -4793,12 +5070,15 @@ PoxPlayer.prototype.Camera.prototype.getMtx = function(scale,sf) {
 			cx = cam.camVX ;
 			cy = cam.camVY ;
 			cz = cam.camVZ ;
+			this.cam.headVec = [cx,cy,cz,0]
 		}
 		else if(cam.camMode=="vr" || cam.camMode=="walk") {
 			// self camera mode 
 			cx = cam.camCX + Math.sin(cam.camRY*RAD)*1*Math.cos(cam.camRX*RAD)
 			cy = cam.camCY + -Math.sin(cam.camRX*RAD)*1 ; 
 			cz = cam.camCZ + -Math.cos(cam.camRY*RAD)*1*Math.cos(cam.camRX*RAD)	
+			let cmat = new Mat4().rotate(-this.cam.camRX,1,0,0).rotate(-this.cam.camRY,0,1,0)
+			this.cam.headVec = cmat.multVec4(0,0,-1,0)
 		} else  {
 		// bird camera mode 
 			camd=  cam.camd*scale ;
@@ -4809,6 +5089,8 @@ PoxPlayer.prototype.Camera.prototype.getMtx = function(scale,sf) {
 			if(camd<0) {
 				cx = cam.camCX*2 ;cy = cam.camCY*2 ;cz = cam.camCZ*2 ;
 			}
+			let l = Math.hypot(cam.camCX,cam.camCY,cam.camCZ)
+			this.cam.headVec = [-cam.camCX/l,-cam.camCY/l,-cam.camCZ/l,0] 
 		}
 
 		this.camVP[0].makeIdentity()
@@ -4817,6 +5099,7 @@ PoxPlayer.prototype.Camera.prototype.getMtx = function(scale,sf) {
 		this.camP[1].makeIdentity()
 		this.camV[0].makeIdentity()
 		this.camV[1].makeIdentity()
+			
 		if(sf) {		// for stereo
 			const dx = -cam.sbase * scale ;	// stereo base
 			ex[0] =  upy * (cam.camCZ-cz) - upz * (cam.camCY-cy);
@@ -4841,34 +5124,53 @@ PoxPlayer.prototype.Camera.prototype.getMtx = function(scale,sf) {
 			this.camVP[0].load(this.camV[0]).multRight(this.camP[0])
 		}
 	}
-
 	if(this.poxp.isVR) {
 		
-		this.poxp.vrDisplay.depthNear = cam.camNear 
-		this.poxp.vrDisplay.depthFar = cam.camFar 
+		POXPDevice.setDepth({camNear:cam.camNear,camFar:cam.camFar})
 
-		this.poxp.vrDisplay.getFrameData(this.vrFrame)
+		vrFrame = POXPDevice.getFrameData()
 //		console.log(vrFrame)
-		if(!this.vrFrame) return 
-		this.cam.orientation = this.vrFrame.pose.orientation
-		this.cam.position = this.vrFrame.pose.position
-		this.vrv[1].load(this.vrFrame.rightViewMatrix)
-		this.vrv[0].load(this.vrFrame.leftViewMatrix)
-		this.vrp[1].load(this.vrFrame.rightProjectionMatrix)
-		this.vrp[0].load(this.vrFrame.leftProjectionMatrix)
+		if(!vrFrame) return 
+		this.cam.orientation = vrFrame.pose.orientation
+		this.cam.position = vrFrame.pose.position
+		if(!this.cam.position) this.cam.position = [0,0,0]
+		this.vrv[1].load(vrFrame.rightViewMatrix)
+		this.vrv[0].load(vrFrame.leftViewMatrix)
+		this.vrp[1].load(vrFrame.rightProjectionMatrix)
+		this.vrp[0].load(vrFrame.leftProjectionMatrix)
  
-		this.camV[0].makeIdentity()
+		this.tempM.makeIdentity()
 			.translate(-cam.camCX,-cam.camCY,-cam.camCZ)
-			.rotate(cam.camRY,0,1,0)
+//			.translate(-this.cam.position[0],-this.cam.position[1],-this.cam.position[2])
 			.rotate(cam.camRX,1,0,0)
+			.rotate(cam.camRY,0,1,0)
 			.rotate(cam.camRZ,0,0,1)
-		this.camV[1].load(this.camV[0])
-		this.camV[0].multRight( this.vrv[0] )
+//			.translate(this.cam.position[0],this.cam.position[1],this.cam.position[2])
+		this.camV[0].load(this.vrv[0])
+		if(this.leftCorrMtx) this.camV[0].multRight(this.leftCorrMtx)
+		this.camV[0].multLeft( this.tempM )
 		this.camVP[0].load(this.camV[0]).multRight(this.vrp[0]) 
 		this.camP[0].load(this.vrp[0])
-		this.camV[1].multRight( this.vrv[1] )
+		this.camV[1].load(this.vrv[1])
+		if(this.rightCorrMtx) this.camV[1].multRight(this.rightCorrMtx)
+		this.camV[1].multLeft( this.tempM )
 		this.camVP[1].load(this.camV[1]).multRight(this.vrp[1]) 
 		this.camP[1].load(this.vrp[1])
+		
+		let cx =0,cy =0,cz=1
+		if(this.cam.orientation ) {
+			let x = this.cam.orientation[0] ;
+			let y = this.cam.orientation[1] ;
+			let z = this.cam.orientation[2] ;
+			let w = this.cam.orientation[3] ;
+			cx = 2*(-x*z-y*w) 
+			cy = 2*(-y*z+x*w)
+			cz = (x*x+y*y-z*z-w*w)
+			let l = Math.hypot(cx,cy,cz)
+			cx /= l ,cy /=l, cz /= l 
+		}
+		let cmat = new Mat4().rotate(-this.cam.camRX,1,0,0).rotate(-this.cam.camRY,0,1,0)
+		this.cam.headVec = cmat.multVec4(cx,cy,cz,0)
 
 		let ivr = new Mat4().load(this.camV[1]).invert() ;
 		let ivl = new Mat4().load(this.camV[0]).invert() ;
@@ -4881,15 +5183,17 @@ PoxPlayer.prototype.Camera.prototype.getMtx = function(scale,sf) {
 	}
 //	console.log(camVP)
 	return [{camX:cam.camCX+ex[0],camY:cam.camCY+ey[0],camZ:cam.camCZ+ez[0], 
-		camV:this.camV[0],camVP:this.camVP[0],camP:this.camP[0], vrFrame:this.vrFrame},
+		camV:this.camV[0],camVP:this.camVP[0],camP:this.camP[0], vrFrame:vrFrame},
 	{camX:cam.camCX+ex[1],camY:cam.camCY+ey[1],camZ:cam.camCZ+ez[1],
-		camV:this.camV[1],camVP:this.camVP[1],camP:this.camP[1],vrFrame:this.vrFrame}] ;
+		camV:this.camV[1],camVP:this.camVP[1],camP:this.camP[1],vrFrame:vrFrame}] ;
 }
 
 //utils
 //console panel
+
 class Cpanel {
 constructor(render,opt) {
+	this.hide = false 
 	if(!opt) opt = {}
 	if(opt.width===undefined) opt.width = 100 
 	if(opt.height===undefined) opt.height = 50 
@@ -4901,7 +5205,6 @@ constructor(render,opt) {
 	if(opt.pos===undefined) opt.pos = [-0.2,0.2,-0.8]
 	if(opt.camFix===undefined) opt.camFix = true 
 
-	
 	this.pcanvas = document.createElement('canvas') ;
 	this.pcanvas.width = opt.width ;
 	this.pcanvas.height = opt.height ;	
@@ -4909,6 +5212,7 @@ constructor(render,opt) {
 	this.j2c.default.font = opt.font
 	this.j2c.default.textColor = opt.color
 	this.clearColor = opt.clearColor 
+	this.ctx = this.j2c.ctx
 
 	this.dd = []
 	let y = opt.lheight 
@@ -4920,18 +5224,23 @@ constructor(render,opt) {
 		
 	const ptex = {name:"cpanel"+this.id,canvas:this.pcanvas,opt:{flevel:1,repeat:2,nomipmap:true}}
 	render.addTex(ptex) 
-	render.addModel(
+	this.model = 
 		{geo:new WWModel().primitive("plane",{wx:opt.width/1000,wy:opt.height/1000
 		}).objModel(),
-			camFix:opt.camFix,
+			camFix:opt.camFix,layer:opt.layer,
 			bm:new CanvasMatrix4().rotate(opt.ry,0,1,0).translate(opt.pos),
 			blend:"alpha",
 			vs_uni:{uvMatrix:[1,0,0, 0,1,0, 0,0,0]},
 			fs_uni:{tex1:"cpanel"+this.id,colmode:2,shmode:1}
 		}
-	)
+	render.addModel(this.model)
+}
+show(flag) {
+	this.hide = !flag 
+	this.model.hide = this.hide 
 }
 update(render,text) {
+	if(this.hide) return 
 	this.j2c.clear(this.clearColor)
 	for(let i=0;i<text.length;i++) 
 		if(text[i]!==null) this.dd[i].str = text[i]

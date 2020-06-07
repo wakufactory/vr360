@@ -5,53 +5,374 @@
 <meta name="viewport" content="width=device-width" /> 
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>VR photo viewer</title>
-<script src="js/poxp_all.js?20200105"></script>
+<title>PolygonExplorerPlayer</title>
+<script src="js/poxp_all.js?20200607" defer></script>
+<script src="js/poxp_view.js?20200607"></script>
 <script>
 function $(e){return document.getElementById(e)}
-let src = {"m":"let src,mode \nlet angh = 63 \nif(POX.param.param) {\n\tsrc = POX.param.param[0] ;\n\tmode = 0 \n\tif(POX.param.param[1]) mode = POX.param.param[1] ;\n\tif(mode==3 && POX.param.param[2]) angh = POX.param.param[2] ;\n}\n\n//settings\nPOX.setting={\n\tname:\"theta_view_vr4\",\n\tscale:1.0,\n\tgyro:true,\n\thighRefreshRate:true,\n\tfoveationLevel:0,\n\tcam:{\n\tcamMode:\"vr\",\n\tgPad:true,\n\tcamAngle:90,\n\tcamCX:0,\n\tcamCY:1.5,\n\tcamCZ:0,\n\tcamRX:0,\n\tcamRZ:0,\n\tcamRY:-90,\n\tcamFar:2000,\n\tcamNear:0.01}\n};\n// light params\nconst lvec = [\n\t\t[0,5,1],\n\t\t[0,-1,0]\n\t]\nconst lcol = [\n\t\t[1,1,1],\n\t\t[0.5,0.5,1]\n\t]\nconst lparam = [\n\t\t[1,0],\n\t\t[0.5,0]\n\t]\n//scenedatass\nPOX.loadImage(src).then(function(img) {\n\tconst can1 = document.createElement('canvas') ;\n\tconst can2 = document.createElement('canvas') ;\n\tlet cw = (POX.wwg.version==1)?4096:img.width/2 \n\tlet ch = (POX.wwg.version==1)?4096:img.height\n\tlet sw = img.width/2 \n\tif(mode==5) {\n\t\tcw = (POX.wwg.version==1)?4096:img.width\n\t\tsw = img.width \n\t}\n\tif(cw>4096) {\n\t\tch = ch * cw/4096 ;cw = 4096 ;\n\t}\n\tPOX.log(cw+\"*\"+ch)\n\tcan1.width = cw ;\n\tcan1.height = ch ;\n\tlet  ctx = can1.getContext(\"2d\") ;\n\tctx.drawImage(img,0,0,sw,img.height,0,0,cw,ch) ;\n\tcan2.width = cw \n\tcan2.height = ch \n\tctx = can2.getContext(\"2d\") \n\tctx.drawImage(img,sw,0,sw,img.height,0,0,cw,ch) ;\n\t\n\tconst sky = new WWModel();\n\tsky.primitive(\"sphere\",{div:40,wx:20,wy:20,\n\twz:20,ninv:true});\n\t\n\tconst scene={\n\t\tenv:{clear_color:[0.0,0.0,0.0,1.0],cull:true},\n\t\tvs_uni:{\n\t\t    col:[0.5,0.5,1.0,1.0]\n\t\t},\n\t\tfs_uni:{\n\t\t\tpamb:0.2,\n\t\t\tpdiff:0.8,\n\t\t\tpspec:0.,\n\t\t\tpref:0.0,\n\t\t\tdspec:60,\n\t\t\tambcolor:[0.,0.,0],\n\t\t\tlvec:lvec,\n\t\t\tlcol:lcol,\n\t\t\tlparam:lparam,\n\t\t\tcolmode:0,\n\t\t\tshmode:0,\n\t\t\tbcolor:[0,0,0,1],\n\t\t\tmode:mode,\n\t\t\tasp:img.width/img.height,\n\t\t\tangh:angh\n\t\t},\n\t\ttexture:[\n\t\t\t{canvas:can1,opt:{flevel:2,repeat:2}},\n\t\t\t{canvas:can2,opt:{flevel:2,repeat:2}}\n\t\t],\n\t\tmodel:[\n\t\t\t{geo:sky.objModel(),\n\t\t\tbm:new CanvasMatrix4().translate(0,2,0),\n\t\t\tfs_uni:{colmode:10,shmode:1,tex1:0,tex2:1,mode:mode}\n\t\t\t},\n\t\t\t{geo:new WWModel().primitive(\"plane\",\n\t\t\t{wx:40,wz:40}).objModel(),hide:mode!=5,\n\t\t\tbm:new Mat4().translate(0,0,0),\n\t\t\tfs_uni:{colmode:3,bcolor:[0.2,0.2,0.2,1]}\n\t\t\t},\n\t\t]\n\t}\n\tPOX.setScene(scene) ;\n})\nPOX.event = function(ev,d) {\n\tif(ev==\"vrchange\") {\n\t\tPOX.log(\"vr \"+d)\n\t\tif(d==1) {\n\t\t\tPOX.cam.camRX = 0 \n\t\t}\n\t}\n\tif(ev==\"gpad\") {\n//\t\tconsole.log(d.dpad)\n\t\tif(d.dpad[0]>0 && d.axes[0]!=0) {\n\t\t\tPOX.cam.camRY += 30*(d.axes[0]>0?1:-1)\n\t\t}\n\t\tif(d.dbtn[4]>0) POX.poxp.exitVR()\n\t}\n\treturn true \n}\n\n//sceneupdate\nPOX.update=function(render,cam,time){\n\tconst ret={};\n\n\treturn ret;\n}\t\n","vs":"attribute vec3 position;\nattribute vec3 norm;\nattribute vec2 uv ;\n\nuniform mat4 modelMatrix;\nuniform mat4 mvpMatrix;\nuniform mat4 invMatrix;\nuniform vec4 col ;\n\nvarying vec3 tpos ;\nvarying vec3 tnorm ;\nvarying vec4 tcolor ;\nvarying vec2 tuv;\n\nvoid main() {\n\tvec2 uv2 = uv ;\n\ttcolor = col ;\n\ttuv\t= vec2(uv.x,1.0-uv.y);\n\ttpos = (modelMatrix * vec4(position,1.0)).xyz ;\n\ttnorm = (invMatrix * vec4(norm,0.0)).xyz ;\n\tgl_Position = mvpMatrix * vec4(position, 1.0) ;\n}\n","fs":"precision highp float;\nconst int lnum = 2 ;\n\nuniform int colmode ;\t//0:basecolor 1:vertex color  2:texture 3:checker 4:sky\nuniform int shmode ;\t//0:normal shading 1:no shading\nuniform vec4 bcolor ;\nuniform vec3 eyevec ;\nuniform float pamb ;\nuniform float pdiff ;\nuniform float pspec ;\nuniform float pref ;\nuniform float dspec ;\nuniform vec3 ambcolor ;\nuniform vec3 lvec[2];\nuniform vec3 lcol[2];\nuniform vec2 lparam[2] ;\nuniform float time ;\n\nuniform int mode ;\nuniform sampler2D tex1;\nuniform sampler2D tex2;\nuniform int stereo ;\nuniform float asp ;\nuniform float angh ;\n\nvarying vec3 tpos ;\nvarying vec3 tnorm ;\nvarying vec4 tcolor ;\nvarying vec2 tuv;\n\nconst float PI = radians(180.) ;\nconst vec3 spcol = vec3(1.,1.,1.) ;\nconst float dd = 0.5 ;\nconst float gamma = 1.0 ;\nconst float checkdiv = 0.02 ;\n\nvec3 skycol(vec2 uv) {\n\tvec3 col ;\n\tconst vec3 skycol = vec3(0.4,0.4,1.0);\n\tconst vec3 horizoncol = vec3(0.8,0.8,0.8) ;\n\tconst vec3 fieldcol = vec3(0.4,1.0,0.4) ;\n\tif(uv.y<0.5) col = mix(skycol,horizoncol,pow(uv.y*2.,5.)) ;\n\telse col = mix(horizoncol,fieldcol,pow(uv.y-0.5,1.)*2.);\n\treturn col ;\n}\n\nvec3 shade(vec3 col,vec3 norm) {\n\tvec3 ev = eyevec - tpos ;\n\tint i ;\n\tfloat diff,spec ;\n\tvec3 fcolor = vec3(0.);\n\tvec3 rcolor = vec3(0.) ;\n\t\n\tfor(int i=0;i<lnum;i++) {\n\t\tfloat lp = lparam[i].x ;\n\t\tif(lp==0.) continue ;\n\t\tvec3 lv = lvec[i] ;\n\t\tif(lparam[i].y!=0.) {\n\t\t\tlv = lv - tpos ;\n\t\t\tlp = (1.- pow(clamp(length(lv)/lparam[i].y,0.,1.),2.))*lparam[i].x ;\n\t\t}\n\t\tlv = normalize(lv) ;\n\t\tdiff= clamp((dot(norm,lv)+dd)/(1.+dd),0.0,1.0);\n\t\tif(pspec>0.)\n\t\t\tspec= pow(clamp(dot(norm,normalize(lv+normalize(ev))),0.0,1.0),dspec);\n\t\tfcolor = fcolor + (col * diff * pdiff + spcol* spec * pspec)*lcol[i].rgb*lp;\n\t}\n\tif(pref>0.) {\n\t\tvec3 ref = normalize(reflect(tpos - eyevec, tnorm));\n\t\tvec2 tc = vec2(\n\t\t\t\t(sign(ref.x)*acos(ref.z/sqrt(ref.x*ref.x+ref.z*ref.z))/PI+1.0)/2.0,\n\t\t\t\tacos(ref.y)/PI\n\t\t\t) ;\n\t\trcolor = skycol(tc) ;\n\t}\n\tfcolor = fcolor + col * ambcolor * pamb + rcolor * pref ;\n\tfcolor = pow(fcolor,vec3(1./gamma)) ;\n\treturn fcolor ;\n}\n\nvec3 gb(sampler2D map,vec2 px, float b) {\n\tvec3 p = texture2D(map, px).xyz ;\n\treturn p ;\n}\nvec3 vrmap(int mode) {\n\tconst float PI = radians(180.0) ;\n\tconst float PI2 = PI+PI ;\n\tvec2 tc = tuv ;\n\tvec3 col ;\n\tif(mode==3) {\n\t\tfloat ah = 180./angh ;\n\t\tfloat aw = 360./(angh*asp) ;\n\t\tfloat px = tc.x*aw*2.0 ;\n\t\tfloat py = tc.y*ah+(0.5-ah/2.);\n\t\tif(py<0. || py>1. || px-aw+1.<0. || px-aw>1.) col = bcolor.rgb ;\n\t\telse col = (tc.x<0.5)?texture2D(tex1, vec2(px-aw+1.,py)).xyz:\n\t\t\ttexture2D(tex2, vec2(px-aw,py)).xyz ;\t\t\n\t} else if(mode==2) {\n\t\tcol = (tc.x<0.25||tc.x>0.75)?bcolor.rgb:\n\t\t((stereo==1)?texture2D(tex1, vec2(tc.x*2.0-0.5,tc.y)).xyz:\n\t\t\ttexture2D(tex2, vec2(tc.x*2.0-0.5,tc.y)).xyz) ;\n\t} else if(mode==1) {\n\t\tcol = (tc.x<0.5)?texture2D(tex1, vec2(tc.x*2.0,tc.y/2.+((stereo==2)?0.5:0.))).xyz:\n\t\t\ttexture2D(tex2, vec2((tc.x-0.5)*2.0,tc.y/2.+((stereo==2)?0.5:0.))).xyz ;\n\t} else if(mode==5) {\n\t\tif(tc.y > 0.5) col = ambcolor ;\n\t\telse {\n\t\t\tfloat r = tc.x * PI2 + PI;\n\t\t\tfloat l = tc.y  ;\n\t\t\tcol = texture2D(tex1,\n\t\t\t\tvec2( l*sin(r)+0.5 ,l*cos(r)+0.5)).xyz ;\n\t\t}\n\t} else {\n\t\tcol = (tc.x<0.5)?texture2D(tex1, vec2(tc.x*2.0,tc.y)).xyz:\n\t\t\ttexture2D(tex2, vec2((tc.x-0.5)*2.0,tc.y)).xyz ;\n\t}\t\n\treturn col ;\n}\nvoid main() {\n\tvec4 color = (colmode==1)?tcolor:(colmode==2)?texture2D(tex1,tuv):bcolor ;\n\tvec3 col = color.rgb ;\n\tif(colmode==3) {\n\t\tcol = col * \n\t\t(((mod(tuv.x ,checkdiv) < checkdiv/2.) ^^ (mod(tuv.y ,checkdiv) < checkdiv/2.))?1.:0.8) ;\n\t}\n\tif(colmode==4) {\n\t\tfloat sun = clamp(dot(normalize(lvec[0]),-normalize(reflect(normalize(tpos), tnorm))),0.,1.) ;\n\t\tcol = skycol(tuv) + pow(sun,80.) * lcol[0]*0.6 ;\n\t}\n\tif(colmode==10) {\n\t\tcol = vrmap(mode) ;\n\t}\n\tvec3 norm = normalize(tnorm) ;\n\n\tgl_FragColor = vec4((shmode!=1)?shade(col,norm):col,color.a);\n}\n"}
 onload = function() {
-	var param = location.search.substr(1).split("&") ;
-	var poxp = new PoxPlayer('#screen1') ;
-	var ss ;
-	if(param[1]==1 || param[1]==2) poxp.param.isStereo=true 
-	poxp.load(src).then(function(src) {
-		ss = src ;
-		poxp.set(src,{param:param}).then(function(pox){
-			if(pox.setting.copyright) $("footer").innerHTML += "&nbsp;&nbsp;"+pox.setting.copyright;
-			poxp.setParam($('pui'))
-			if(pox.setting.title) document.title = pox.setting.title + " - PoExE Player"
-		})
-	}).catch(function(err) {
-		$("loading").style.display = "none" ;
-		alert(err) ;
-	})
-	poxp.renderStart = function() {
-		$("loading").style.display = "none" ;		
+function main(POX) {
+let src = "sample/R0010392.JPG"
+let mode = 1
+let angh = 40
+let mzz=0.6
+console.log(POX.param.query)
+if(POX.param.query[0]) {
+	src = POX.param.query[0] ;
+	mode = 0 
+	if(POX.param.query[1]) mode = POX.param.query[1] ;
+	if(mode==3 && POX.param.query[2]) angh = POX.param.query[2] ;
+}
+
+//settings
+POX.setting={
+	name:"pano_view_vr2",
+	scale:1.0,
+	pixRatio:1.2,
+	gyro:true,
+	highRefreshRate:true,
+	foveationLevel:1,
+	cam:{
+	camMode:"vr",
+	gPad:true,
+	camAngle:90,
+	camCX:0,
+	camCY:0,
+	camCZ:0,
+	camRX:0,
+	camRZ:0,
+	camRY:-90,
+	camFar:2000,
+	camNear:0.01}
+};
+// light params
+const lvec = [
+		[0,5,1],
+		[0,-1,0]
+	]
+const lcol = [
+		[1,1,1],
+		[0.5,0.5,1]
+	]
+const lparam = [
+		[1,0],
+		[0.5,0]
+	]
+//scenedatass
+	
+	const scene={
+		env:{clear_color:[0.0,0.0,0.0,1.0],cull:true},
+		vs_uni:{
+		    col:[0.5,0.5,1.0,1.0]
+		},
+		fs_uni:{
+			pamb:0.2,
+			pdiff:0.8,
+			pspec:0.,
+			pref:0.0,
+			dspec:60,
+			ambcolor:[0.,0.,0],
+			lvec:lvec,
+			lcol:lcol,
+			lparam:lparam,
+			colmode:0,
+			shmode:0,
+			bcolor:[0,0,0.2,1]
+		},
+		texture:[
+		],
+		model:[
+			{geo:new WWModel().primitive("plane",
+			{wx:40,wz:40}).objModel(),hide:mode!=5,
+			bm:new Mat4().translate(0,-2,0),
+			fs_uni:{colmode:3,bcolor:[0.1,0.1,0.1,1]}
+			},
+		]
 	}
-	poxp.setError( function(msg) {
-		console.log(msg) ;
+	POX.setScene(scene).then(()=>{
+		loadscreen()
 	})
 
-	$("vrbtn").addEventListener("click", (ev)=>{
-	  if (
-	    window.DeviceOrientationEvent &&
-	    DeviceOrientationEvent.requestPermission &&
-	    typeof DeviceOrientationEvent.requestPermission === 'function'
-	  ) {
-	    DeviceOrientationEvent.requestPermission();
-	  }
-		window.addEventListener("deviceorientation", function(ev) {
-			var or = window.orientation ;
-			var d = (or==90||or==-90) ;
-			poxp.param.isStereo = d ;
-			$("cc").style.opacity = d?0.:0.4 ;
-			$("footer").style.display = d?"none":"block" ;
-			$("vrbtn").style.display = d?"none":"block" ;
-			window.scrollTo(0,1000)
-		})
-		poxp.enterVR()
-	}) 
+function loadscreen() {
+	POX.loadImage(src).then(function(img) {
+		const sobj = {name:"screen",geo: new WWModel().primitive("sphere",{div:40,wx:20,wy:20,wz:20,ninv:true}).objModel(),
+			bm:new CanvasMatrix4().translate(0,0,0),
+			fs_uni:{colmode:10,shmode:1,tex1:0,tex2:1,mode:mode,
+				mode:mode,angh:angh,zc:[0.5,0.5],zr:0,zz:1-mzz}
+			}
+		POX.render.addModel(sobj)
+		const zobj = POX.render.getModelData("screen")
+		const can1 = document.createElement('canvas') ;
+		const can2 = document.createElement('canvas') ;
+		let cw = (POX.wwg.version==1)?4096:img.width/2 
+		let ch = (POX.wwg.version==1)?4096:img.height
+		let sw = img.width/2 
+		if(mode==5) {
+			cw = (POX.wwg.version==1)?4096:img.width
+			sw = img.width 
+		}
+		if(cw>4096) {
+			ch = ch * 4096/cw ;cw = 4096 ;
+		}
+		POX.log(cw+"*"+ch)
+		POX.log(sw+"*"+img.height)
+		can1.width = cw ;
+		can1.height = ch ;
+		let  ctx = can1.getContext("2d") ;
+		ctx.drawImage(img,0,0,sw,img.height,0,0,cw,ch) ;
+		can2.width = cw 
+		can2.height = ch 
+		ctx = can2.getContext("2d") 
+		ctx.drawImage(img,sw,0,sw,img.height,0,0,cw,ch) ;
+	
+		POX.render.addTex({canvas:can1,opt:{flevel:1,repeat:2,nomipmap:true,format:"rgb"}})
+		POX.render.addTex({canvas:can2,opt:{flevel:1,repeat:2,nomipmap:true,format:"rgb"}})
+	
+		zobj.fs_uni.asp = img.width/img.height
+
+		POX.poxp.addEvent("frame",(ev)=>{
+
+			let hv = ev.cam.headVec
+			let px = 0.25-Math.atan2(hv[0],hv[2])/Math.PI/2 ;
+			if(px>1) px = px-1 
+			if(px<0) px = px+1
+			let py = Math.acos(hv[1])/Math.PI
+			zobj.fs_uni.zc = [px,py]
+			if(ev.rightPad) {
+				if(ev.rightPad.buttons[0].pressed) {
+					zobj.fs_uni.zz = 1 - ev.rightPad.buttons[0].value * mzz
+					zobj.fs_uni.zr = 0.2
+				} else zobj.fs_uni.zr = 0 
+			}
+		})	
+	})
+}
+
+
+POX.event = function(ev,d) {
+	if(ev=="vrchange") {
+		POX.log("vr "+d)
+		if(d==1) {
+			POX.cam.camRX = 0 
+		}
+	}
+	if(ev=="gpad") {
+//		console.log(d.dpad)
+		if(d.dpad[0]>0 && d.axes[0]!=0) {
+			POX.cam.camRY += 30*(d.axes[0]>0?1:-1)
+		}
+		if(d.dpad[2]>0 && d.axes[2]!=0) {
+			POX.cam.camRY += 30*(d.axes[2]>0?1:-1)
+		}
+		if(d.dbtn[5]>0) POX.poxp.exitVR()
+		let zobj = POX.poxp.render.getModelData("screen")
+		let hv = POX.cam.headVec
+//		zobj.fs_uni.zr = d.buttons[0].pressed?0.2:0
+
+	}
+	return true 
+}
+
+//sceneupdate
+POX.update=function(render,cam,time){
+	const ret={};
+
+	return ret;
+}	
+}
+const vshader = `attribute vec3 position;
+attribute vec3 norm;
+attribute vec2 uv ;
+
+uniform mat4 modelMatrix;
+uniform mat4 mvpMatrix;
+uniform mat4 invMatrix;
+uniform vec4 col ;
+
+varying vec3 tpos ;
+varying vec3 tnorm ;
+varying vec4 tcolor ;
+varying vec2 tuv;
+
+void main() {
+	vec2 uv2 = uv ;
+	tcolor = col ;
+	tuv	= vec2(uv.x,1.0-uv.y);
+	tpos = (modelMatrix * vec4(position,1.0)).xyz ;
+	tnorm = (invMatrix * vec4(norm,0.0)).xyz ;
+	gl_Position = mvpMatrix * vec4(position, 1.0) ;
+}
+`
+const fshader = `precision highp float;
+const int lnum = 2 ;
+
+uniform int colmode ;	//0:basecolor 1:vertex color  2:texture 3:checker 4:sky
+uniform int shmode ;	//0:normal shading 1:no shading
+uniform vec4 bcolor ;
+uniform vec3 eyevec ;
+uniform float pamb ;
+uniform float pdiff ;
+uniform float pspec ;
+uniform float pref ;
+uniform float dspec ;
+uniform vec3 ambcolor ;
+uniform vec3 lvec[2];
+uniform vec3 lcol[2];
+uniform vec2 lparam[2] ;
+uniform float time ;
+
+uniform int mode ;
+uniform sampler2D tex1;
+uniform sampler2D tex2;
+uniform int stereo ;
+uniform float asp ;
+uniform float angh ;
+uniform float zr;
+uniform float zz ;
+uniform vec2 zc ;
+
+varying vec3 tpos ;
+varying vec3 tnorm ;
+varying vec4 tcolor ;
+varying vec2 tuv;
+
+const float PI = radians(180.) ;
+const vec3 spcol = vec3(1.,1.,1.) ;
+const float dd = 0.5 ;
+const float gamma = 1.0 ;
+const float checkdiv = 0.02 ;
+
+vec3 skycol(vec2 uv) {
+	vec3 col ;
+	const vec3 skycol = vec3(0.4,0.4,1.0);
+	const vec3 horizoncol = vec3(0.8,0.8,0.8) ;
+	const vec3 fieldcol = vec3(0.4,1.0,0.4) ;
+	if(uv.y<0.5) col = mix(skycol,horizoncol,pow(uv.y*2.,5.)) ;
+	else col = mix(horizoncol,fieldcol,pow(uv.y-0.5,1.)*2.);
+	return col ;
+}
+
+vec3 shade(vec3 col,vec3 norm) {
+	vec3 ev = eyevec - tpos ;
+	int i ;
+	float diff,spec ;
+	vec3 fcolor = vec3(0.);
+	vec3 rcolor = vec3(0.) ;
+	
+	for(int i=0;i<lnum;i++) {
+		float lp = lparam[i].x ;
+		if(lp==0.) continue ;
+		vec3 lv = lvec[i] ;
+		if(lparam[i].y!=0.) {
+			lv = lv - tpos ;
+			lp = (1.- pow(clamp(length(lv)/lparam[i].y,0.,1.),2.))*lparam[i].x ;
+		}
+		lv = normalize(lv) ;
+		diff= clamp((dot(norm,lv)+dd)/(1.+dd),0.0,1.0);
+		if(pspec>0.)
+			spec= pow(clamp(dot(norm,normalize(lv+normalize(ev))),0.0,1.0),dspec);
+		fcolor = fcolor + (col * diff * pdiff + spcol* spec * pspec)*lcol[i].rgb*lp;
+	}
+	if(pref>0.) {
+		vec3 ref = normalize(reflect(tpos - eyevec, tnorm));
+		vec2 tc = vec2(
+				(sign(ref.x)*acos(ref.z/sqrt(ref.x*ref.x+ref.z*ref.z))/PI+1.0)/2.0,
+				acos(ref.y)/PI
+			) ;
+		rcolor = skycol(tc) ;
+	}
+	fcolor = fcolor + col * ambcolor * pamb + rcolor * pref ;
+	fcolor = pow(fcolor,vec3(1./gamma)) ;
+	return fcolor ;
+}
+
+vec3 gb(sampler2D map,vec2 px, float b) {
+	vec3 p = texture2D(map, px).xyz ;
+	return p ;
+}
+vec3 vrmap(int mode) {
+	const float PI = radians(180.0) ;
+	const float PI2 = PI+PI ;
+	vec2 tc = tuv ;
+	vec3 col ;
+		vec2 cv = zc ;
+		if(cv.x < 0.25 && tc.x > 0.75) cv.x += 1.0 ;
+		if(cv.x > 0.75 && tc.x < 0.25) cv.x -= 1.0 ;
+		float len = length((tc-cv)*vec2(2.,1.)) ;
+		float ll = 1.0 ;
+		if(len <zr) {
+			tc = (tc-cv)*zz+cv ;
+			if(tc.x>1.0) tc.x -= 1.0 ;
+			if(tc.x<0.0) tc.x += 1.0 ;
+			ll = 1.0 - smoothstep(0.95,1.0,len/zr);
+		}
+	if(mode==3) {	//pano
+		float ah = 180./angh ;
+		float aw = 360./(angh*asp) ;
+		float px = tc.x*aw*2.0 ;
+		float py = tc.y*ah+(0.5-ah/2.);
+		if(py<0. || py>1. || px-aw<-1. || px-aw>1.) col = bcolor.rgb ;
+		else {
+			col = (tc.x<0.5)?texture2D(tex1, vec2(1.+px-aw,py)).xyz:
+			texture2D(tex2, vec2(px-aw,py)).xyz ;
+		}
+	} else if(mode==4) {	//pano stereo
+		float ah = 180./angh ;
+		float aw = 360./(angh*asp*2.) ;
+		float px = tc.x*aw*2.0 ;
+		float py = tc.y*ah+(0.5-ah/2.);
+		if( py<0. || py > 1. || px-aw<-1. || px-aw>1.) col = bcolor.rgb ;
+		
+		else {
+			py = py/2.0+((stereo==2)?0.5:0.) ;
+			col = (tc.x<0.5)?texture2D(tex1, vec2(1.+px-aw,py)).xyz:
+			texture2D(tex2, vec2(px-aw,py)).xyz ;
+		}
+	} else if(mode==2) {	//vr180
+		col = ((tc.x<0.25||tc.x>0.75)?bcolor.rgb:
+		((stereo==1)?texture2D(tex1, vec2(tc.x*2.0-0.5,tc.y)).xyz:
+			texture2D(tex2, vec2(tc.x*2.0-0.5,tc.y)).xyz) ) ;
+	} else if(mode==1) {	// 360stereo
+		col = (tc.x<0.5)?texture2D(tex1, vec2(tc.x*2.0,tc.y/2.+((stereo==2)?0.5:0.))).xyz:
+			texture2D(tex2, vec2((tc.x-0.5)*2.0,tc.y/2.+((stereo==2)?0.5:0.))).xyz ;
+	} else if(mode==5) {	//domemaster
+		if(tc.y > 0.5) col = ambcolor ;
+		else {
+			float r = tc.x * PI2 + PI;
+			float l = tc.y  ;
+			col = texture2D(tex1,
+				vec2( l*sin(r)+0.5 ,l*cos(r)+0.5)).xyz ;
+		}
+	} else {	//360
+		col = ((tc.x<0.5)?texture2D(tex1, vec2(tc.x*2.0,tc.y)).xyz:
+			texture2D(tex2, vec2((tc.x-0.5)*2.0,tc.y)).xyz) ;
+	}
+	
+//	if(mod(tc.x,1./12.) < 0.0005) ll = 0.5 ;
+	return col*ll ;
+}
+void main() {
+	vec4 color = (colmode==1)?tcolor:(colmode==2)?texture2D(tex1,tuv):bcolor ;
+	vec3 col = color.rgb ;
+	if(colmode==3) {
+		col = col * 
+		(((mod(tuv.x ,checkdiv) < checkdiv/2.) ^^ (mod(tuv.y ,checkdiv) < checkdiv/2.))?1.:0.8) ;
+	}
+	if(colmode==4) {
+		float sun = clamp(dot(normalize(lvec[0]),-normalize(reflect(normalize(tpos), tnorm))),0.,1.) ;
+		col = skycol(tuv) + pow(sun,80.) * lcol[0]*0.6 ;
+	}
+	if(colmode==10) {
+		col = vrmap(mode) ;
+	}
+	vec3 norm = normalize(tnorm) ;
+
+	gl_FragColor = vec4((shmode!=1)?shade(col,norm):col,color.a);
+}
+`
+	POXP.init(()=>{
+		$("loading").style.display = "none" ;		
+	}, {m:main,vs:vshader,fs:fshader})
 }
 </script>
 <style>
@@ -71,7 +392,7 @@ canvas {
 }
 #cc {
 	position:absolute ;
-	width:10rem ;
+	width:17rem ;
 	top:0;
 	left:0;
 	color:#eee ;
@@ -119,11 +440,50 @@ canvas {
 .oswitch input[type=checkbox]:checked + .sbtn:before {
 	content: "▶️" ;
 }
+#bc {
+	position:absolute ;
+	height:20vw ;
+	bottom:1rem;
+	left:0;
+	color:#eee ;
+	background-color:#222 ;
+	opacity:0.4 ;
+	font-size:5vw ;	
+	user-select: none;
+	-webkit-user-select: none;
+}
+#bc button {
+	font-size:2vw ;
+}
+div.pad {
+	position:absolute ;
+	height:9.7rem ;
+	bottom:0rem;
+	color:#eee ;
+	background-color:#222 ;
+	opacity:0.6 ;
+	vertical-align:baseline;
+	font-size:10px ;	
+	user-select: none;
+	-webkit-user-select: none;
+}
+#padl {
+	left:0;	
+}
+#padr {
+	right:0;
+}
+div.pad button {
+	background-color:#aaa ;
+}
+div.pad button:hover {
+	background-color:#fff ;
+}
 #vrbtn {
 	position:absolute ;
 	width:50px ;
 	height:50px ;
-	top:calc( 100% - 50px ) ;
+	top:0;
 	left:calc( 100% - 50px ) ;
 	opacity: 0.8 ;
 	background-color:#ccc;
@@ -134,9 +494,6 @@ canvas {
 </style>
 </head>
 <body>
-<div id=cc>
-<div id=pui></div>
-</div>
 <div id=loading><img src="img/guruguru.gif"></div>
 <div id=vrbtn></div>
 <canvas id="screen1"></canvas>
